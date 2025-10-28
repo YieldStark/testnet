@@ -52,8 +52,17 @@ async function depositToVWBTC(account: AccountInterface, address: string, amount
   // Execute both calls in a single transaction (multiWrite)
   const tx = await account.execute([approveCall, depositCall])
   
-  // Wait for confirmation
-  await account.waitForTransaction(tx.transaction_hash)
+  // Wait for confirmation (with timeout handling)
+  try {
+    await account.waitForTransaction(tx.transaction_hash, {
+      retryInterval: 1000,
+      successStates: ["ACCEPTED_ON_L2", "ACCEPTED_ON_L1"]
+    })
+    console.log("Deposit transaction confirmed")
+  } catch (waitError) {
+    // If waitForTransaction times out or fails, still return the hash
+    console.warn("Transaction wait timed out, but transaction was sent:", tx.transaction_hash)
+  }
   
   return tx.transaction_hash
 }

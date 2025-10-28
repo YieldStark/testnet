@@ -64,7 +64,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (isConnected && wallet?.address) fetchBalance();
-  }, [isConnected, wallet?.address, fetchBalance]);
+  }, [isConnected, wallet?.address, fetchBalance, refreshKey]);
 
 
   // Format address for display (show first 6 and last 4 characters)

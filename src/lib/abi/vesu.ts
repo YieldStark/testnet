@@ -218,7 +218,6 @@ export async function checkVWBTCBalance(account: AccountInterface): Promise<bigi
 }
 
 // ✅ Withdraw from Vesu using vWBTC redeem function
-// Using the EXACT same pattern as deposit (account.execute with raw calldata)
 export async function withdrawFromVesu(account: AccountInterface, amount: bigint): Promise<string> {
   try {
     // Check if user has enough vWBTC balance
@@ -234,32 +233,44 @@ export async function withdrawFromVesu(account: AccountInterface, amount: bigint
 
     const amountUint256 = uint256.bnToUint256(amount);
 
-    console.log("Calling redeem function on vWBTC contract...");
-    console.log("Shares (vWBTC) to burn - low:", amountUint256.low.toString());
-    console.log("Shares (vWBTC) to burn - high:", amountUint256.high.toString());
+    console.log("Preparing withdrawal...");
+    console.log("Assets (WBTC) to withdraw - low:", amountUint256.low);
+    console.log("Assets (WBTC) to withdraw - high:", amountUint256.high);
     console.log("Receiver:", account.address);
     console.log("Owner:", account.address);
 
-    // Use account.execute with raw calldata (same pattern as deposit)
-    const redeemCall = {
+    // Use withdraw instead of redeem - withdraw takes asset amount, not share amount
+    const withdrawCall = {
       contractAddress: VWBTC_ADDRESS,
-      entrypoint: "redeem",
+      entrypoint: "withdraw",
       calldata: [
-        amountUint256.low,    // shares.low
-        amountUint256.high,   // shares.high
+        amountUint256.low,    // assets.low (WBTC amount)
+        amountUint256.high,   // assets.high (WBTC amount)
         account.address,      // receiver
         account.address       // owner
       ],
     };
 
-    // Execute the redeem call
-    const tx = await account.execute([redeemCall]);
+    console.log("Executing withdraw call...");
+    
+    // Execute single call
+    const tx = await account.execute([withdrawCall]);
     
     console.log("Withdrawal transaction sent:", tx.transaction_hash);
     
-    // Wait for the transaction to be accepted
-    await account.waitForTransaction(tx.transaction_hash);
-    console.log("Withdrawal transaction confirmed");
+    // Wait for the transaction to be accepted (with timeout)
+    try {
+      await account.waitForTransaction(tx.transaction_hash, {
+        retryInterval: 1000,
+        successStates: ["ACCEPTED_ON_L2", "ACCEPTED_ON_L1"]
+      });
+      console.log("Withdrawal transaction confirmed");
+    } catch (waitError) {
+      // If waitForTransaction times out or fails, still return the hash
+      // The transaction may still be processing
+      console.warn("Transaction wait timed out, but transaction was sent:", tx.transaction_hash);
+    }
+    
     console.log("Successfully withdrew", Number(amount) / 1e8, "WBTC from Vesu");
     
     return tx.transaction_hash;
