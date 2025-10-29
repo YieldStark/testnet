@@ -8,7 +8,7 @@ import { ChevronDown, Menu } from 'lucide-react'
 import { connect, disconnect } from '@starknet-io/get-starknet'
 import { WalletAccount } from 'starknet'
 import { useWalletStore } from '@/providers/wallet-store-provider'
-import { useAccount, useSwitchChain } from '@starknet-react/core'
+import { useSwitchChain } from '@starknet-react/core'
 import { sepolia, mainnet } from '@starknet-react/chains'
 
 interface HeaderProps {
@@ -19,10 +19,8 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   const pathname = usePathname()
   const [isChainDropdownOpen, setIsChainDropdownOpen] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
-  const [connectedWallet, setConnectedWallet] = useState<any>(null)
-  const [currentChain, setCurrentChain] = useState(sepolia)
+  const [currentChain, setCurrentChain] = useState<typeof mainnet | typeof sepolia>(sepolia)
   
-  const { account } = useAccount()
   const { switchChain } = useSwitchChain({})
   
   const { isConnected, connectWallet, disconnectWallet } = useWalletStore(
@@ -57,15 +55,15 @@ const Header = ({ onMenuClick }: HeaderProps) => {
             { nodeUrl: rpcUrl },
             lastWallet
           )
-          setConnectedWallet(myWalletAccount)
-          connectWallet(myWalletAccount as any)
+          connectWallet(myWalletAccount)
         }
-      } catch (error) {
+      } catch {
         console.log('No existing wallet connection found')
       }
     }
 
     checkExistingConnection()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleConnectWallet = async () => {
@@ -88,8 +86,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           selectedWalletSWO
         )
 
-        setConnectedWallet(myWalletAccount)
-        connectWallet(myWalletAccount as any)
+        connectWallet(myWalletAccount)
         console.log('Wallet connected:', myWalletAccount.address)
       }
     } catch (error) {
@@ -103,7 +100,6 @@ const Header = ({ onMenuClick }: HeaderProps) => {
   const handleDisconnectWallet = async () => {
     try {
       await disconnect()
-      setConnectedWallet(null)
       disconnectWallet()
       console.log('Wallet disconnected')
     } catch (error) {
@@ -111,10 +107,10 @@ const Header = ({ onMenuClick }: HeaderProps) => {
     }
   }
 
-  const handleChainSelect = async (chainOption: { name: string; id: string; chain: any }) => {
+  const handleChainSelect = async (chainOption: { name: string; id: string; chain: typeof mainnet | typeof sepolia }) => {
     try {
       if (switchChain && chainOption.chain) {
-        await switchChain(chainOption.chain)
+        await switchChain({ chainId: `0x${chainOption.chain.id.toString(16)}` })
         setCurrentChain(chainOption.chain)
         console.log('Switched to chain:', chainOption.name)
       }

@@ -1,5 +1,6 @@
-import { RpcProvider, Contract } from 'starknet'
-import { VWBTC_ADDRESS, WBTC, universalErc20Abi } from '@/lib/utils/Constants'
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { RpcProvider } from 'starknet'
+import { VWBTC_ADDRESS } from '@/lib/utils/Constants'
 
 export interface Transaction {
   hash: string

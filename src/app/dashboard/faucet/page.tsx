@@ -92,9 +92,10 @@ export default function FaucetPage() {
 
       toast.success('WBTC claimed successfully!')
       
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to claim tokens'
       console.error('Claim failed:', error)
-      toast.error(error.message || 'Failed to claim tokens')
+      toast.error(errorMessage)
     } finally {
       setClaiming(false)
     }
@@ -319,7 +320,7 @@ export default function FaucetPage() {
 
                 {/* Next Steps */}
                 <div className="space-y-3 text-left">
-                  <p className="text-sm font-medium text-white text-center mb-4">What's Next?</p>
+                  <p className="text-sm font-medium text-white text-center mb-4">What&apos;s Next?</p>
                   
                   <div className="flex items-start space-x-3 p-3 bg-[#101D22] rounded-lg">
                     <div className="w-6 h-6 bg-[#97FCE4] rounded-full flex items-center justify-center flex-shrink-0">

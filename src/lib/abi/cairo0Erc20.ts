@@ -32,7 +32,7 @@ export const cairo0Erc20Abi = [
     "type": "function",
     "inputs": [
       { "name": "spender", "type": "felt" },
-      { "name": "amount", "type": "felt" }
+      { "name": "amount", "type": "Uint256" }
     ],
     "outputs": [{ "name": "success", "type": "felt" }],
     "stateMutability": "external"
@@ -44,8 +44,18 @@ export const cairo0Erc20Abi = [
       { "name": "owner", "type": "felt" },
       { "name": "spender", "type": "felt" }
     ],
-    "outputs": [{ "name": "remaining", "type": "felt" }],
+    "outputs": [{ "name": "remaining", "type": "Uint256" }],
     "stateMutability": "view"
+  },
+  {
+    "name": "transfer",
+    "type": "function",
+    "inputs": [
+      { "name": "recipient", "type": "felt" },
+      { "name": "amount", "type": "Uint256" }
+    ],
+    "outputs": [{ "name": "success", "type": "felt" }],
+    "stateMutability": "external"
   }
 ] as const;
 

@@ -7,13 +7,11 @@ import DepositModal from '@/components/ui/DepositModal'
 import WithdrawModal from '@/components/ui/WithdrawModal'
 import { useWalletStore } from '@/providers/wallet-store-provider'
 import { useTokenAddress, useYieldStarkAddress } from '@/lib/contracts'
-import { ERC20_ABI } from '@/lib/abi/erc20'
 import { cairo0Erc20Abi } from '@/lib/abi/cairo0Erc20'
-import { Contract, uint256, RpcProvider } from 'starknet'
-import { toUint256FromDecimals, uint256ToDecimalString } from '@/lib/u256'
+import { Contract, RpcProvider, Account } from 'starknet'
 import { depositVesuFlow } from '@/lib/depositOrchestrator'
 import { useNetworkStore } from '@/stores/network-store'
-import { VWBTC_ADDRESS, WBTC } from '@/lib/utils/Constants'
+import { WBTC } from '@/lib/utils/Constants'
 
 export default function DashboardPage() {
   const vaultAddress = useWalletStore((state) => state.vaultAddress)
@@ -23,9 +21,6 @@ export default function DashboardPage() {
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false)
   const explorerUrl = useNetworkStore((s) => s.currentNetwork.explorerUrl)
   const yieldStarkAddress = useYieldStarkAddress()
-  const wbtcAddress = useTokenAddress('WBTC')
-  const [userStaked, setUserStaked] = useState<string>('0')
-  const wbtcDecimals = 8 // Update if different on Starknet
   const [loading, setLoading] = useState(false)
   const [wbtcBalance, setWbtcBalance] = useState<string>('0')
   const [refreshKey, setRefreshKey] = useState(0) // Key to trigger component refresh
@@ -91,7 +86,7 @@ export default function DashboardPage() {
       if (!wallet) throw new Error('Wallet not connected')
       // Use the proven working vWBTC batched calls approach
       const txHash = await depositVesuFlow({
-        account: wallet as any,
+        account: wallet as Account,
         address: wallet.address,
         amountStr: amount,
         signTypedDataAsync: async () => ({}), // Not used in vWBTC path
@@ -119,7 +114,7 @@ export default function DashboardPage() {
         }
       }
       
-      await refreshUserStaked()
+      await fetchBalance()
       
       // Trigger immediate refresh of both components
       setRefreshKey(prev => prev + 1)
@@ -145,7 +140,7 @@ export default function DashboardPage() {
       console.log('Starting withdrawal...', amount, 'WBTC')
       
       // Execute withdrawal
-      const txHash = await withdrawFromVesu(wallet as any, amountBigInt)
+      const txHash = await withdrawFromVesu(wallet as Account, amountBigInt)
       
       console.log('Withdrawal successful! Transaction hash:', txHash)
       
@@ -168,7 +163,7 @@ export default function DashboardPage() {
         }
       }
       
-      await refreshUserStaked()
+      await fetchBalance()
       
       // Trigger immediate refresh of both components
       setRefreshKey(prev => prev + 1)
@@ -179,27 +174,6 @@ export default function DashboardPage() {
       throw error
     }
   }
-
-  const refreshUserStaked = async () => {
-    try {
-      if (!wallet?.address) return
-      
-      // Fetch WBTC balance using the exact working approach from previous codebase
-      const sepoliaProvider = new RpcProvider({ nodeUrl: "https://starknet-sepolia.public.blastapi.io/rpc/v0_6" });
-      const wbtcContract = new Contract({ abi: cairo0Erc20Abi, address: WBTC, providerOrAccount: sepoliaProvider });
-      const res = await wbtcContract.balanceOf(wallet.address);
-      const formattedBalance = formatBalance(res.balance.toString());
-      setUserStaked(formattedBalance);
-    } catch (error) {
-      console.error('Failed to fetch WBTC balance:', error)
-      // Keep previous value on error
-    }
-  }
-
-  useEffect(() => {
-    refreshUserStaked()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yieldStarkAddress, wbtcAddress, wallet?.address])
 
   return (
     <div className="space-y-6">

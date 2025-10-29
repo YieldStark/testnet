@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAccount } from '@starknet-react/core'
 import { useWalletStore } from '@/providers/wallet-store-provider'
 import { ExternalLink, Clock, TrendingUp, ArrowDownCircle, ArrowUpCircle, RefreshCw, Inbox } from 'lucide-react'
@@ -18,15 +18,7 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (userAddress) {
-      fetchTransactionHistory()
-    } else {
-      setLoading(false)
-    }
-  }, [userAddress])
-
-  const fetchTransactionHistory = async () => {
+  const fetchTransactionHistory = useCallback(async () => {
     if (!userAddress) return
 
     setLoading(true)
@@ -36,13 +28,21 @@ export default function HistoryPage() {
       // Use the utility function to fetch transaction history
       const txHistory = await fetchUserTransactionHistory(userAddress)
       setTransactions(txHistory)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching transaction history:', err)
       setError('Failed to load transaction history')
     } finally {
       setLoading(false)
     }
-  }
+  }, [userAddress])
+
+  useEffect(() => {
+    if (userAddress) {
+      fetchTransactionHistory()
+    } else {
+      setLoading(false)
+    }
+  }, [userAddress, fetchTransactionHistory])
 
   const formatDate = (timestamp: number) => {
     try {
@@ -176,7 +176,7 @@ export default function HistoryPage() {
             </div>
             <h3 className="text-xl font-medium text-white mb-2">No Transactions Yet</h3>
             <p className="text-gray-400 text-center mb-6 max-w-md">
-              You haven't made any deposits or withdrawals yet. Start by depositing WBTC to earn yield!
+              You haven&apos;t made any deposits or withdrawals yet. Start by depositing WBTC to earn yield!
             </p>
             <button
               onClick={() => window.location.href = '/dashboard'}

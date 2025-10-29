@@ -7,6 +7,9 @@ import StarknetProvider from "@/providers/starknet-provider";
 export const metadata: Metadata = {
   title: "YieldStark - DeFi Yield Optimization on Starknet",
   description: "Optimize your DeFi yields with YieldStark's intelligent agent on Starknet",
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

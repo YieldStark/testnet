@@ -1,7 +1,8 @@
-import { Contract, RpcProvider, AccountInterface, uint256 } from "starknet";
+import { Contract, RpcProvider, AccountInterface, uint256, Account } from "starknet";
 import { VESU_SINGLETON, WBTC, universalErc20Abi, VWBTC_ADDRESS } from "@/lib/utils/Constants";
-import { vwbtcAbi } from "@/lib/abi/vwbtc";
 import { cairo0Erc20Abi } from "@/lib/abi/cairo0Erc20";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 // ✅ Use universal ERC20 ABI from Constants (compatible with starknet.js)
 const wbtcABI = universalErc20Abi as any;
@@ -77,7 +78,7 @@ const singletonABI = [
 // ✅ Check WBTC balance
 export async function checkWBTCBalance(account: AccountInterface): Promise<bigint> {
   try {
-    const wbtcContract = new (Contract as any)(wbtcABI as any, WBTC, account);
+    const wbtcContract = new (Contract as any)(wbtcABI, WBTC, account);
     const balance = await wbtcContract.balanceOf(account.address);
     return balance.balance;
   } catch (error) {
@@ -89,7 +90,7 @@ export async function checkWBTCBalance(account: AccountInterface): Promise<bigin
 // ✅ Check WBTC allowance
 export async function checkWBTCAllowance(account: AccountInterface): Promise<bigint> {
   try {
-    const wbtcContract = new (Contract as any)(wbtcABI as any, WBTC, account);
+    const wbtcContract = new (Contract as any)(wbtcABI, WBTC, account);
     const allowance = await wbtcContract.allowance(account.address, VESU_SINGLETON);
     return allowance.remaining;
   } catch (error) {
@@ -114,7 +115,7 @@ export async function approveWBTC(account: AccountInterface, amount: bigint): Pr
       return "already_approved";
     }
 
-    const wbtcContract = new (Contract as any)(wbtcABI as any, WBTC, account);
+    const wbtcContract = new (Contract as any)(wbtcABI, WBTC, account);
     const amountUint256 = uint256.bnToUint256(amount);
 
     console.log("Approving WBTC...");
@@ -152,7 +153,7 @@ export async function depositToVesu(account: AccountInterface, amount: bigint): 
       throw new Error("Insufficient WBTC allowance. Please approve first.");
     }
 
-    const singletonContract = new (Contract as any)(singletonABI as any, VESU_SINGLETON, account);
+    const singletonContract = new (Contract as any)(singletonABI, VESU_SINGLETON, account);
     const amountUint256 = uint256.bnToUint256(amount);
 
     console.log("Depositing to Vesu...");
@@ -204,21 +205,34 @@ export async function checkVWBTCBalance(account: AccountInterface): Promise<bigi
     const vwbtcContract = new Contract({ abi: cairo0Erc20Abi, address: VWBTC_ADDRESS, providerOrAccount: sepoliaProvider });
     const res = await vwbtcContract.balanceOf(account.address);
     
-    // Access balance the same way as WBTC
-    const balanceValue = BigInt(res.balance.toString());
-    console.log("vWBTC balance:", balanceValue.toString());
-    console.log("vWBTC balance in WBTC:", Number(balanceValue) / 1e8);
+    // Properly handle Uint256 structure
+    let balanceValue: bigint
+    if (typeof res.balance === 'object' && res.balance !== null && 'low' in res.balance) {
+      // It's a Uint256 object with low and high parts
+      const low = BigInt(res.balance.low || 0)
+      const high = BigInt(res.balance.high || 0)
+      // Combine: value = low + (high * 2^128)
+      balanceValue = low + (high * (BigInt(2) ** BigInt(128)))
+    } else {
+      // It's already a bigint or number
+      balanceValue = BigInt(res.balance)
+    }
+    
+    console.log("vWBTC balance (raw):", balanceValue.toString());
+    // vWBTC uses 18 decimals (Starknet standard), not 8
+    console.log("vWBTC balance (formatted with 18 decimals):", Number(balanceValue) / 1e18);
     
     return balanceValue;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     console.error("Error checking vWBTC balance:", error);
-    console.error("Error details:", error.message);
-    throw new Error(`Failed to check vWBTC balance: ${error.message}`);
+    console.error("Error details:", errorMessage);
+    throw new Error(`Failed to check vWBTC balance: ${errorMessage}`);
   }
 }
 
 // ✅ Withdraw from Vesu using vWBTC redeem function
-export async function withdrawFromVesu(account: AccountInterface, amount: bigint): Promise<string> {
+export async function withdrawFromVesu(account: Account, amount: bigint): Promise<string> {
   try {
     // Check if user has enough vWBTC balance
     const vwbtcBalance = await checkVWBTCBalance(account);
@@ -274,9 +288,10 @@ export async function withdrawFromVesu(account: AccountInterface, amount: bigint
     console.log("Successfully withdrew", Number(amount) / 1e8, "WBTC from Vesu");
     
     return tx.transaction_hash;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     console.error("Error withdrawing from Vesu:", error);
-    console.error("Error message:", error.message);
+    console.error("Error message:", errorMessage);
     throw error;
   }
 } 

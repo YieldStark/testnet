@@ -1,314 +1,278 @@
 'use client'
 
-import { useState } from 'react'
-import { useAccount } from '@starknet-react/core'
+import { useState, useEffect } from 'react'
 import { useWalletStore } from '@/providers/wallet-store-provider'
-import { TrendingUp, Shield, Zap, ArrowUpRight, CheckCircle } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { useYieldStarkAddress, useTokenAddress } from '@/lib/contracts'
+import { stakingAbi } from '@/lib/abi/staking'
+import { cairo0Erc20Abi } from '@/lib/abi/cairo0Erc20'
+import { Contract, RpcProvider, CallData, Account } from 'starknet'
+import { uint256 } from 'starknet'
 
 export default function StakingPage() {
-  const { } = useAccount()
-  const { } = useWalletStore((state) => state)
-  const [selectedStakingOption, setSelectedStakingOption] = useState<string | null>(null)
+  const wallet = useWalletStore((state) => state.wallet)
+  const userAddress = wallet?.address
+  const stakingAddress = useYieldStarkAddress()
+  const wbtcAddress = useTokenAddress('WBTC')
 
-  const stakingOptions = [
-    {
-      id: 'bitcoin-staking',
-      name: 'Bitcoin Staking',
-      apy: '8.5%',
-      minStake: '0.01',
-      lockPeriod: '30 days',
-      description: 'Stake your Bitcoin and earn rewards on Starknet',
-      features: ['Native Bitcoin support', 'High security', 'Flexible terms'],
-      isLive: true,
-      color: '#F7931A',
-      icon: '₿'
-    },
-    {
-      id: 'eth-staking',
-      name: 'Ethereum Staking',
-      apy: '6.2%',
-      minStake: '0.1',
-      lockPeriod: '60 days',
-      description: 'Stake Ethereum and earn consistent yields',
-      features: ['Ethereum 2.0 compatible', 'Validator rewards', 'Compound interest'],
-      isLive: false,
-      color: '#627EEA',
-      icon: 'Ξ'
-    },
-    {
-      id: 'multi-asset',
-      name: 'Multi-Asset Staking',
-      apy: '7.8%',
-      minStake: '0.05',
-      lockPeriod: '45 days',
-      description: 'Diversified staking across multiple assets',
-      features: ['Portfolio diversification', 'Risk management', 'Auto-rebalancing'],
-      isLive: false,
-      color: '#97FCE4',
-      icon: '⚡'
+  const [stakeAmount, setStakeAmount] = useState('')
+  const [unstakeAmount, setUnstakeAmount] = useState('')
+  const [stakedBalance, setStakedBalance] = useState('0')
+  const [walletBalance, setWalletBalance] = useState('0')
+  const [totalStaked, setTotalStaked] = useState('0')
+  const [isStaking, setIsStaking] = useState(false)
+  const [isUnstaking, setIsUnstaking] = useState(false)
+
+  // Fetch balances
+  useEffect(() => {
+    if (!userAddress) return
+
+    const fetchBalances = async () => {
+      try {
+        const sepoliaProvider = new RpcProvider({ 
+          nodeUrl: "https://starknet-sepolia.public.blastapi.io/rpc/v0_6" 
+        })
+
+        // Create contracts with provider for read-only operations
+        const stakingContract = new Contract({
+          abi: stakingAbi,
+          address: stakingAddress,
+          providerOrAccount: sepoliaProvider
+        })
+
+        const wbtcContract = new Contract({
+          abi: cairo0Erc20Abi,
+          address: wbtcAddress,
+          providerOrAccount: sepoliaProvider
+        })
+
+        // Get staked balance
+        const staked = await stakingContract.get_staked(wbtcAddress, userAddress)
+        const stakedBigInt = typeof staked === 'bigint' ? staked : BigInt(staked.toString())
+        setStakedBalance((Number(stakedBigInt) / 1e8).toFixed(8))
+
+        // Get wallet balance
+        const balanceRes = await wbtcContract.balanceOf(userAddress)
+        let balanceRawString = "0"
+        
+        if (typeof balanceRes.balance === 'object' && balanceRes.balance !== null && 'low' in balanceRes.balance) {
+          const low = BigInt(balanceRes.balance.low || 0)
+          const high = BigInt(balanceRes.balance.high || 0)
+          const combined = low + (high * (BigInt(2) ** BigInt(128)))
+          balanceRawString = combined.toString()
+        } else {
+          balanceRawString = balanceRes.balance.toString()
+        }
+        
+        setWalletBalance((Number(balanceRawString) / 1e8).toFixed(8))
+
+        // Get total staked
+        const total = await stakingContract.get_total_staked()
+        const totalBigInt = typeof total === 'bigint' ? total : BigInt(total.toString())
+        setTotalStaked((Number(totalBigInt) / 1e8).toFixed(8))
+      } catch (error) {
+        console.error('Error fetching balances:', error)
+      }
     }
-  ]
 
-  const stats = [
-    { label: 'Total Staked', value: '$2.4M', change: '+12.5%' },
-    { label: 'Active Stakers', value: '1,247', change: '+8.2%' },
-    { label: 'Average APY', value: '7.2%', change: '+0.3%' },
-    { label: 'Total Rewards', value: '$180K', change: '+15.1%' }
-  ]
+    fetchBalances()
+    const interval = setInterval(fetchBalances, 10000)
+    return () => clearInterval(interval)
+  }, [userAddress, wbtcAddress, stakingAddress])
+
+  const handleStake = async () => {
+    if (!wallet || !stakeAmount) return
+    
+    setIsStaking(true)
+    try {
+      const wbtcContract = new Contract({
+        abi: cairo0Erc20Abi,
+        address: wbtcAddress,
+        providerOrAccount: wallet as Account
+      })
+
+      const stakingContract = new Contract({
+        abi: stakingAbi,
+        address: stakingAddress,
+        providerOrAccount: wallet as Account
+      })
+      
+      // Convert amount to smallest unit (8 decimals for wBTC)
+      const amountBigInt = BigInt(Math.floor(parseFloat(stakeAmount) * 1e8))
+      const amountUint256 = uint256.bnToUint256(amountBigInt)
+      
+      console.log('Stake amount:', stakeAmount)
+      console.log('Amount BigInt:', amountBigInt.toString())
+      console.log('Amount Uint256:', amountUint256)
+      console.log('Wallet balance:', walletBalance)
+      console.log('WBTC Address:', wbtcAddress)
+      console.log('Staking Address:', stakingAddress)
+      
+      // Step 1: Approve
+      console.log('Step 1: Approving wBTC...')
+      try {
+        // For Cairo0 ERC20, use CallData to properly compile the parameters
+        const calldata = CallData.compile([stakingAddress, amountUint256])
+        console.log('Compiled calldata:', calldata)
+        
+        const approveTx = await wbtcContract.invoke('approve', calldata)
+        console.log('Approval transaction sent:', approveTx.transaction_hash)
+        await (wallet as Account).waitForTransaction(approveTx.transaction_hash)
+        console.log('Approval confirmed!')
+      } catch (approveError) {
+        const errorMessage = approveError instanceof Error ? approveError.message : 'Unknown error'
+        console.error('Approval failed:', approveError)
+        throw new Error('Failed to approve wBTC. ' + errorMessage)
+      }
+      
+      // Step 2: Stake
+      console.log('Step 2: Staking wBTC...')
+      try {
+        const stakeTx = await stakingContract.stake(amountUint256, wbtcAddress)
+        console.log('Stake transaction sent:', stakeTx.transaction_hash)
+        await (wallet as Account).waitForTransaction(stakeTx.transaction_hash)
+        console.log('Stake confirmed!')
+      } catch (stakeError) {
+        const errorMessage = stakeError instanceof Error ? stakeError.message : 'Unknown error'
+        console.error('Staking failed:', stakeError)
+        throw new Error('Failed to stake wBTC. ' + errorMessage)
+      }
+      
+      setStakeAmount('')
+      alert('Staking successful!')
+      
+      // Refresh balances
+      window.location.reload()
+    } catch (error: unknown) {
+      console.error('Full error object:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      alert('Staking failed: ' + errorMessage)
+    } finally {
+      setIsStaking(false)
+    }
+  }
+
+  const handleUnstake = async () => {
+    if (!wallet || !unstakeAmount) return
+    
+    setIsUnstaking(true)
+    try {
+      const stakingContract = new Contract({
+        abi: stakingAbi,
+        address: stakingAddress,
+        providerOrAccount: wallet as Account
+      })
+      
+      const amountInSmallestUnit = uint256.bnToUint256(BigInt(Math.floor(parseFloat(unstakeAmount) * 1e8)))
+      
+      const tx = await stakingContract.unstake(amountInSmallestUnit, wbtcAddress)
+      await (wallet as Account).waitForTransaction(tx.transaction_hash)
+      
+      setUnstakeAmount('')
+      alert('Unstaking successful!')
+    } catch (error) {
+      console.error('Unstaking error:', error)
+      alert('Unstaking failed. Please try again.')
+    } finally {
+      setIsUnstaking(false)
+    }
+  }
+
+  if (!userAddress) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <h2 className="text-2xl font-medium text-white mb-4">Connect Wallet</h2>
+          <p className="text-gray-400">Please connect your wallet to stake wBTC</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header Section */}
-      <div className="bg-[#101D22] rounded-4xl p-6">
-        <div className="flex items-center space-x-4 mb-6">
-          <div className="w-12 h-12 bg-[#F7931A] rounded-full flex items-center justify-center">
-            <span className="text-2xl font-bold text-white">₿</span>
-          </div>
-          <div>
-            <h1 className="text-3xl font-medium text-white">Bitcoin Staking</h1>
-            <p className="text-gray-400">Now live on Starknet</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {stats.map((stat, index) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="bg-[#0F1A1F] rounded-xl p-4"
-            >
-              <p className="text-sm text-gray-400 mb-1">{stat.label}</p>
-              <p className="text-2xl font-bold text-white mb-1">{stat.value}</p>
-              <p className="text-sm text-[#97FCE4] flex items-center">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                {stat.change}
-              </p>
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Live Status Banner */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-gradient-to-r from-[#F7931A] to-[#FFB84D] rounded-xl p-4 mb-6"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
-            <span className="text-white font-medium">Bitcoin Staking is now live!</span>
-            <span className="text-white/80 text-sm">Start earning rewards today</span>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Staking Options */}
-      <div className="bg-[#101D22] rounded-4xl p-6">
-        <h2 className="text-2xl font-medium text-white mb-6">Staking Options</h2>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {stakingOptions.map((option, index) => (
-            <motion.div
-              key={option.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className={`relative bg-[#0F1A1F] rounded-xl p-6 border-2 transition-all duration-200 ${
-                selectedStakingOption === option.id
-                  ? 'border-[#97FCE4] shadow-lg shadow-[#97FCE4]/20'
-                  : 'border-transparent hover:border-gray-700'
-              } ${!option.isLive ? 'opacity-60' : 'cursor-pointer'}`}
-              onClick={() => option.isLive && setSelectedStakingOption(option.id)}
-            >
-              {/* Live Badge */}
-              {option.isLive && (
-                <div className="absolute -top-2 -right-2 bg-[#97FCE4] text-black px-3 py-1 rounded-full text-xs font-medium">
-                  LIVE
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-[#101D22] rounded-2xl p-6">
+          <p className="text-sm text-gray-400 mb-2">Your Staked</p>
+          <p className="text-2xl font-bold text-white">{stakedBalance} wBTC</p>
                 </div>
-              )}
-
-              {/* Coming Soon Badge */}
-              {!option.isLive && (
-                <div className="absolute -top-2 -right-2 bg-gray-600 text-white px-3 py-1 rounded-full text-xs font-medium">
-                  COMING SOON
-                </div>
-              )}
-
-              <div className="space-y-4">
-                {/* Header */}
-                <div className="flex items-center space-x-3">
-                  <div 
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                    style={{ backgroundColor: option.color }}
-                  >
-                    {option.icon}
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-medium text-white">{option.name}</h3>
-                    <p className="text-sm text-gray-400">{option.description}</p>
-                  </div>
-                </div>
-
-                {/* APY */}
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-[#97FCE4]">{option.apy}</p>
-                  <p className="text-sm text-gray-400">Annual Percentage Yield</p>
-                </div>
-
-                {/* Details */}
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-400">Min Stake:</span>
-                    <span className="text-sm text-white">{option.minStake} BTC</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-400">Lock Period:</span>
-                    <span className="text-sm text-white">{option.lockPeriod}</span>
-                  </div>
-                </div>
-
-                {/* Features */}
-                <div className="space-y-2">
-                  {option.features.map((feature, featureIndex) => (
-                    <div key={featureIndex} className="flex items-center space-x-2">
-                      <CheckCircle className="w-4 h-4 text-[#97FCE4]" />
-                      <span className="text-sm text-gray-300">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Action Button */}
-                <button
-                  className={`w-full py-3 rounded-lg font-medium transition-colors ${
-                    option.isLive
-                      ? 'bg-[#97FCE4] text-black hover:bg-[#85E6D1]'
-                      : 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                  }`}
-                  disabled={!option.isLive}
-                >
-                  {option.isLive ? 'Start Staking' : 'Coming Soon'}
-                </button>
+        <div className="bg-[#101D22] rounded-2xl p-6">
+          <p className="text-sm text-gray-400 mb-2">Wallet Balance</p>
+          <p className="text-2xl font-bold text-white">{walletBalance} wBTC</p>
               </div>
-            </motion.div>
-          ))}
+        <div className="bg-[#101D22] rounded-2xl p-6">
+          <p className="text-sm text-gray-400 mb-2">Total Staked</p>
+          <p className="text-2xl font-bold text-white">{totalStaked} wBTC</p>
         </div>
       </div>
 
-      {/* How It Works */}
-      <div className="bg-[#101D22] rounded-4xl p-6">
-        <h2 className="text-2xl font-medium text-white mb-6">How Bitcoin Staking Works</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            {
-              step: '01',
-              title: 'Deposit Bitcoin',
-              description: 'Send your Bitcoin to our secure vault on Starknet',
-              icon: <Shield className="w-6 h-6" />
-            },
-            {
-              step: '02',
-              title: 'Start Earning',
-              description: 'Your Bitcoin is automatically staked and starts earning rewards',
-              icon: <Zap className="w-6 h-6" />
-            },
-            {
-              step: '03',
-              title: 'Claim Rewards',
-              description: 'Withdraw your rewards or compound them for higher yields',
-              icon: <ArrowUpRight className="w-6 h-6" />
-            }
-          ].map((step, index) => (
-            <motion.div
-              key={step.step}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.2 }}
-              className="text-center"
-            >
-              <div className="w-16 h-16 bg-[#97FCE4] rounded-full flex items-center justify-center mx-auto mb-4">
-                <div className="text-black">
-                  {step.icon}
-                </div>
-              </div>
-              <div className="text-sm text-[#97FCE4] font-medium mb-2">{step.step}</div>
-              <h3 className="text-lg font-medium text-white mb-2">{step.title}</h3>
-              <p className="text-gray-400 text-sm">{step.description}</p>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* Security & Benefits */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Security */}
-        <div className="bg-[#101D22] rounded-4xl p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <Shield className="w-6 h-6 text-[#97FCE4]" />
-            <h3 className="text-xl font-medium text-white">Security</h3>
-          </div>
+      {/* Stake Section */}
+      <div className="bg-[#101D22] rounded-2xl p-6">
+        <h2 className="text-xl font-medium text-white mb-6">Stake wBTC</h2>
           
           <div className="space-y-4">
-            <div className="flex items-start space-x-3">
-              <CheckCircle className="w-5 h-5 text-[#97FCE4] mt-0.5" />
               <div>
-                <p className="text-white font-medium">Multi-signature Wallets</p>
-                <p className="text-sm text-gray-400">Your funds are protected by multiple security layers</p>
-              </div>
+            <div className="flex justify-between mb-2">
+              <label className="text-sm text-gray-400">Amount</label>
+              <button
+                onClick={() => setStakeAmount(walletBalance)}
+                className="text-sm text-[#97FCE4] hover:underline"
+              >
+                Max: {walletBalance}
+              </button>
             </div>
-            
-            <div className="flex items-start space-x-3">
-              <CheckCircle className="w-5 h-5 text-[#97FCE4] mt-0.5" />
-              <div>
-                <p className="text-white font-medium">Audited Smart Contracts</p>
-                <p className="text-sm text-gray-400">All contracts are thoroughly audited by security experts</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start space-x-3">
-              <CheckCircle className="w-5 h-5 text-[#97FCE4] mt-0.5" />
-              <div>
-                <p className="text-white font-medium">Insurance Coverage</p>
-                <p className="text-sm text-gray-400">Your staked assets are covered by comprehensive insurance</p>
-              </div>
-            </div>
+            <input
+              type="number"
+              value={stakeAmount}
+              onChange={(e) => setStakeAmount(e.target.value)}
+              placeholder="0.0"
+              className="w-full bg-[#0F1A1F] text-white text-xl px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#97FCE4]"
+              step="0.00000001"
+            />
           </div>
-        </div>
 
-        {/* Benefits */}
-        <div className="bg-[#101D22] rounded-4xl p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <TrendingUp className="w-6 h-6 text-[#97FCE4]" />
-            <h3 className="text-xl font-medium text-white">Benefits</h3>
+          <button
+            onClick={handleStake}
+            disabled={isStaking || !stakeAmount}
+            className="w-full py-3 bg-[#97FCE4] text-black font-medium rounded-lg hover:bg-[#85E6D1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isStaking ? 'Staking...' : 'Stake'}
+          </button>
+        </div>
           </div>
+
+      {/* Unstake Section */}
+      <div className="bg-[#101D22] rounded-2xl p-6">
+        <h2 className="text-xl font-medium text-white mb-6">Unstake wBTC</h2>
           
           <div className="space-y-4">
-            <div className="flex items-start space-x-3">
-              <CheckCircle className="w-5 h-5 text-[#97FCE4] mt-0.5" />
               <div>
-                <p className="text-white font-medium">High APY</p>
-                <p className="text-sm text-gray-400">Earn up to 8.5% APY on your Bitcoin</p>
-              </div>
+            <div className="flex justify-between mb-2">
+              <label className="text-sm text-gray-400">Amount</label>
+              <button
+                onClick={() => setUnstakeAmount(stakedBalance)}
+                className="text-sm text-[#97FCE4] hover:underline"
+              >
+                Max: {stakedBalance}
+              </button>
             </div>
-            
-            <div className="flex items-start space-x-3">
-              <CheckCircle className="w-5 h-5 text-[#97FCE4] mt-0.5" />
-              <div>
-                <p className="text-white font-medium">Flexible Terms</p>
-                <p className="text-sm text-gray-400">Choose from various staking periods</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start space-x-3">
-              <CheckCircle className="w-5 h-5 text-[#97FCE4] mt-0.5" />
-              <div>
-                <p className="text-white font-medium">No Lock-up</p>
-                <p className="text-sm text-gray-400">Withdraw your funds anytime after the minimum period</p>
-              </div>
-            </div>
+            <input
+              type="number"
+              value={unstakeAmount}
+              onChange={(e) => setUnstakeAmount(e.target.value)}
+              placeholder="0.0"
+              className="w-full bg-[#0F1A1F] text-white text-xl px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#97FCE4]"
+              step="0.00000001"
+            />
           </div>
+
+          <button
+            onClick={handleUnstake}
+            disabled={isUnstaking || !unstakeAmount}
+            className="w-full py-3 bg-[#97FCE4] text-black font-medium rounded-lg hover:bg-[#85E6D1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isUnstaking ? 'Unstaking...' : 'Unstake'}
+          </button>
         </div>
       </div>
     </div>

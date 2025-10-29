@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { AccountInterface, uint256 } from 'starknet'
 import { WBTC, VWBTC_ADDRESS } from './utils/Constants'
 
@@ -10,7 +11,7 @@ export type DepositParams = {
 }
 
 export async function depositVesuFlow(params: DepositParams): Promise<string> {
-  const { account, address, amountStr, signTypedDataAsync, useSignature = true } = params
+  const { account, address, amountStr } = params
 
   if (!account?.address) throw new Error('Wallet not connected.')
   if (!address) throw new Error('Receiver address missing.')

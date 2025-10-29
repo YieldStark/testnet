@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Contract, WalletAccount, Call, RpcProvider, uint256, AccountInterface } from "starknet";
 import { shortString } from "starknet";
 

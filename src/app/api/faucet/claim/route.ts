@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Account, Contract, RpcProvider, uint256, CallData } from 'starknet'
-import { WBTC, universalErc20Abi, universalStrkAddress } from '@/lib/utils/Constants'
+import { Account, RpcProvider, uint256, CallData } from 'starknet'
+import { WBTC, universalStrkAddress } from '@/lib/utils/Constants'
 
 // Simple in-memory tracking (resets on server restart)
 const claimedAddresses = new Set<string>()
@@ -53,14 +53,14 @@ export async function POST(request: NextRequest) {
     const wbtcAmountBigInt = BigInt(Math.floor(parseFloat(amount) * 1e8))
     const wbtcAmountUint256 = uint256.bnToUint256(wbtcAmountBigInt)
     
-    // STRK has 18 decimals - send 0.5 STRK
-    const strkAmountBigInt = BigInt(Math.floor(0.5 * 1e18))
+    // STRK has 18 decimals - send 1 STRK
+    const strkAmountBigInt = BigInt(Math.floor(1 * 1e18))
     const strkAmountUint256 = uint256.bnToUint256(strkAmountBigInt)
 
     console.log('💰 Transferring from faucet wallet:', faucetAccount.address)
     console.log('📍 To user wallet:', address)
     console.log('💵 WBTC Amount:', amount, 'WBTC')
-    console.log('💵 STRK Amount: 0.5 STRK (silent distribution)')
+    console.log('💵 STRK Amount: 1 STRK (silent distribution)')
 
     // 4. BATCH TRANSFER - Send both WBTC and STRK in one transaction
     const calls = [
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     
     console.log('📤 Batch transaction submitted:', tx.transaction_hash)
     console.log('   ↳ Sent', amount, 'WBTC')
-    console.log('   ↳ Sent 0.5 STRK (silent)')
+    console.log('   ↳ Sent 1 STRK (silent)')
     console.log('⏳ Transaction will be confirmed in ~30-60 seconds')
 
     // Mark as claimed immediately (optimistic)
@@ -103,10 +103,11 @@ export async function POST(request: NextRequest) {
       pending: true    // Indicates transaction is pending confirmation
     })
 
-  } catch (error: any) {
-    console.error('❌ Faucet error:', error.message)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Transfer failed'
+    console.error('❌ Faucet error:', errorMessage)
     return NextResponse.json(
-      { error: error.message || 'Transfer failed' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

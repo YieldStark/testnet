@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAccount } from '@starknet-react/core'
 import { useWalletStore } from '@/providers/wallet-store-provider'
 import { Contract, RpcProvider } from 'starknet'
-import { VWBTC_ADDRESS, universalErc20Abi } from '@/lib/utils/Constants'
+import { VWBTC_ADDRESS } from '@/lib/utils/Constants'
+import { cairo0Erc20Abi } from '@/lib/abi/cairo0Erc20'
 import { Loader2 } from 'lucide-react'
 
 const AgentPerformance = () => {
@@ -20,6 +21,89 @@ const AgentPerformance = () => {
   const vesuAPY = '3.14'
   const ekuboAPY = '2.00'
 
+  // Format balance function - BigInt-safe for large numbers
+  const formatBalance = (balanceRawString: string, decimals: number = 18) => {
+    if (!balanceRawString) return "0";
+    
+    // Use BigInt for safe math with large numbers
+    const rawBalance = BigInt(balanceRawString);
+    const DIVISOR = BigInt(10) ** BigInt(decimals);
+
+    // Get the whole number part
+    const wholePart = rawBalance / DIVISOR;
+    
+    // Get the fractional part
+    const fractionalPart = rawBalance % DIVISOR;
+
+    // Convert fractional part to string and pad with leading zeros
+    const fractionalString = fractionalPart.toString().padStart(decimals, '0');
+
+    // Combine whole and fractional
+    const result = `${wholePart}.${fractionalString}`;
+
+    // Remove trailing zeros after decimal
+    const [w, f] = result.split('.');
+    
+    // Trim trailing zeros from fractional part
+    const trimmedFractional = f ? f.replace(/0+$/, '') : '';
+
+    if (trimmedFractional.length === 0) {
+        return w; // Return only the whole number if fraction is zero
+    }
+    
+    // Return whole part and trimmed fraction
+    return `${w}.${trimmedFractional}`;
+  };
+
+  const fetchRealData = useCallback(async () => {
+    if (!userAddress) return
+
+    setLoading(true)
+
+    try {
+      // Fetch real vWBTC balance from blockchain - THIS IS THE PRIMARY SOURCE
+      let balanceRawString = "0"
+      try {
+        // Use exact same pattern as dashboard WBTC balance fetch
+        const sepoliaProvider = new RpcProvider({ 
+          nodeUrl: "https://starknet-sepolia.public.blastapi.io/rpc/v0_6" 
+        })
+        const vwbtcContract = new Contract({ 
+          abi: cairo0Erc20Abi, 
+          address: VWBTC_ADDRESS, 
+          providerOrAccount: sepoliaProvider 
+        })
+        const res = await vwbtcContract.balanceOf(userAddress)
+        
+        // Convert to string - handle both bigint and object responses
+        if (typeof res.balance === 'object' && res.balance !== null && 'low' in res.balance) {
+          // It's a Uint256 object
+          const low = BigInt(res.balance.low || 0)
+          const high = BigInt(res.balance.high || 0)
+          const combined = low + (high * (BigInt(2) ** BigInt(128)))
+          balanceRawString = combined.toString()
+        } else {
+          // It's already a bigint
+          balanceRawString = res.balance.toString()
+        }
+      } catch (err) {
+        console.error('Error fetching blockchain balance:', err)
+      }
+
+      // Use blockchain balance as the source of truth - format with 18 decimals (Starknet standard)
+      const vesuBalanceFormatted = formatBalance(balanceRawString, 18)
+      setVesuBalance(vesuBalanceFormatted)
+
+      // Ekubo not implemented yet
+      setEkuboBalance('0.0000')
+
+    } catch (error) {
+      console.error('Error fetching agent performance:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [userAddress])
+
   useEffect(() => {
     if (userAddress) {
       fetchRealData()
@@ -33,61 +117,7 @@ const AgentPerformance = () => {
     } else {
       setLoading(false)
     }
-  }, [userAddress])
-
-  const fetchRealData = async () => {
-    if (!userAddress) return
-
-    setLoading(true)
-
-    try {
-      // Get transaction history from localStorage (deposits and withdrawals)
-      const transactions = getTransactionHistory(userAddress)
-      
-      // Calculate net balance from transaction history
-      const netBalance = transactions.reduce((sum: number, tx: any) => {
-        if (tx.type === 'deposit') {
-          return sum + parseFloat(tx.amount || '0')
-        } else if (tx.type === 'withdraw') {
-          return sum - parseFloat(tx.amount || '0')
-        }
-        return sum
-      }, 0)
-
-      console.log('📊 Agent Performance - Transaction History:', transactions)
-      console.log('💰 Agent Performance - Net Balance:', netBalance)
-
-      // Try to fetch real vWBTC balance from blockchain (as verification)
-      let blockchainBalance = 0
-      try {
-        const provider = new RpcProvider({
-          nodeUrl: 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8'
-        })
-        const vwbtcContract = new (Contract as any)(
-          universalErc20Abi as any,
-          VWBTC_ADDRESS,
-          provider
-        )
-        const balance = await vwbtcContract.balance_of(userAddress)
-        blockchainBalance = Number(BigInt(balance.toString())) / 1e8
-        console.log('⛓️ Agent Performance - Blockchain Balance:', blockchainBalance)
-      } catch (err) {
-        console.error('Error fetching blockchain balance:', err)
-      }
-
-      // Use the maximum of localStorage net balance and blockchain balance
-      const vesuBalance = Math.max(netBalance, blockchainBalance)
-      setVesuBalance(vesuBalance.toFixed(4))
-
-      // Ekubo not implemented yet
-      setEkuboBalance('0.0000')
-
-    } catch (error) {
-      console.error('Error fetching agent performance:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [userAddress, fetchRealData])
 
   const getTransactionHistory = (address: string) => {
     if (!address) return []
@@ -96,9 +126,9 @@ const AgentPerformance = () => {
       const key = `tx_history_${address.toLowerCase()}`
       const data = localStorage.getItem(key)
       if (data) {
-        const transactions = JSON.parse(data)
+        const transactions = JSON.parse(data) as Array<{type: string}>
         // Return both deposits and withdrawals
-        return transactions.filter((tx: any) => tx.type === 'deposit' || tx.type === 'withdraw')
+        return transactions.filter((tx) => tx.type === 'deposit' || tx.type === 'withdraw')
       }
       return []
     } catch {

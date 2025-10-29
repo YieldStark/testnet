@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, CheckCircle } from 'lucide-react'
+import { X, CheckCircle, Copy, ExternalLink, Sparkles } from 'lucide-react'
 
 interface WithdrawModalProps {
   isOpen: boolean
@@ -16,8 +16,17 @@ const WithdrawModal = ({ isOpen, onClose, onWithdraw }: WithdrawModalProps) => {
   const [error, setError] = useState('')
   const [txHash, setTxHash] = useState<string | null>(null)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const isValidAmount = amount && parseFloat(amount) > 0
+
+  const copyToClipboard = async () => {
+    if (txHash) {
+      await navigator.clipboard.writeText(txHash)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
 
   const handleWithdraw = async () => {
     if (!isValidAmount) return
@@ -39,8 +48,9 @@ const WithdrawModal = ({ isOpen, onClose, onWithdraw }: WithdrawModalProps) => {
           setError('')
         }, 5000) // 5 seconds
       }
-    } catch (err: any) {
-      setError(err.message || 'Withdrawal failed. Please try again.')
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Withdrawal failed. Please try again.'
+      setError(errorMessage)
       console.error('Withdrawal error:', err)
     } finally {
       setIsWithdrawing(false)
@@ -76,27 +86,104 @@ const WithdrawModal = ({ isOpen, onClose, onWithdraw }: WithdrawModalProps) => {
               
               {/* Success State */}
               {isSuccess && txHash ? (
-                <div className="text-center py-6">
-                  <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <CheckCircle className="w-8 h-8 text-white" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-white mb-2">Withdrawal Successful!</h3>
-                  <p className="text-gray-300 mb-4">Your transaction has been submitted to the network.</p>
-                  <div className="bg-[#0F1A1F] rounded-lg p-3 border border-gray-700">
-                    <p className="text-sm text-gray-400 mb-1">Transaction Hash:</p>
-                    <p className="text-xs text-[#97FCE4] font-mono break-all">
-                      {txHash}
-                    </p>
-                    <a
-                      href={`https://sepolia.starkscan.co/tx/${txHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-blue-400 hover:text-blue-300 underline mt-2 inline-block"
-                    >
-                      View on Starkscan →
-                    </a>
-                  </div>
-                </div>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  className="text-center py-8"
+                >
+                  {/* Success Icon with Animation */}
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1, rotate: 360 }}
+                    transition={{ duration: 0.6, ease: "backOut" }}
+                    className="relative w-24 h-24 mx-auto mb-6"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full animate-pulse" />
+                    <div className="absolute inset-1 bg-[#101D22] rounded-full flex items-center justify-center">
+                      <CheckCircle className="w-12 h-12 text-green-400" />
+                    </div>
+                    {/* Sparkles */}
+                    <Sparkles className="absolute -top-2 -right-2 w-6 h-6 text-yellow-400 animate-bounce" />
+                    <Sparkles className="absolute -bottom-2 -left-2 w-5 h-5 text-blue-400 animate-bounce delay-100" />
+                  </motion.div>
+
+                  {/* Success Message */}
+                  <motion.h3
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="text-3xl font-bold text-white mb-3"
+                  >
+                    Withdrawal Successful! 🎉
+                  </motion.h3>
+                  
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className="mb-6"
+                  >
+                    <p className="text-gray-300 mb-2">Your withdrawal of</p>
+                    <p className="text-2xl font-bold text-[#97FCE4]">{amount} WBTC</p>
+                    <p className="text-gray-400 text-sm mt-2">has been submitted to the network</p>
+                  </motion.div>
+
+                  {/* Transaction Hash */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="bg-gradient-to-br from-[#0F1A1F] to-[#1a2832] rounded-xl p-4 border border-gray-700/50"
+                  >
+                    <p className="text-sm text-gray-400 mb-3">Transaction Hash</p>
+                    <div className="bg-[#0b161a] rounded-lg p-3 mb-4">
+                      <p className="text-xs text-[#97FCE4] font-mono break-all">
+                        {txHash}
+                      </p>
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={copyToClipboard}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-all duration-200"
+                      >
+                        {copied ? (
+                          <>
+                            <CheckCircle className="w-4 h-4" />
+                            <span className="text-sm">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4" />
+                            <span className="text-sm">Copy Hash</span>
+                          </>
+                        )}
+                      </button>
+                      
+                      <a
+                        href={`https://sepolia.starkscan.co/tx/${txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#97FCE4] hover:bg-[#85E6D1] text-black rounded-lg transition-all duration-200 font-medium"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        <span className="text-sm">View on Explorer</span>
+                      </a>
+                    </div>
+                  </motion.div>
+
+                  {/* Info Message */}
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-xs text-gray-500 mt-6"
+                  >
+                    Your funds will be available in your wallet shortly
+                  </motion.p>
+                </motion.div>
               ) : (
                 <>
                   <div className="mb-6">

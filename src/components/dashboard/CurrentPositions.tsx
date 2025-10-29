@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Check, Loader2, RefreshCw } from 'lucide-react'
-import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
+import { AreaChart, Area, ResponsiveContainer } from 'recharts'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { useAccount } from '@starknet-react/core'
 import { useWalletStore } from '@/providers/wallet-store-provider'
 import { Contract, RpcProvider } from 'starknet'
-import { VWBTC_ADDRESS, universalErc20Abi } from '@/lib/utils/Constants'
+import { VWBTC_ADDRESS } from '@/lib/utils/Constants'
+import { cairo0Erc20Abi } from '@/lib/abi/cairo0Erc20'
 
 interface Position {
   protocol: string
@@ -28,66 +29,86 @@ const CurrentPositions = () => {
   const [positions, setPositions] = useState<Position[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchPositions()
+  // Format balance function - BigInt-safe for large numbers
+  const formatBalance = (balanceRawString: string, decimals: number = 18) => {
+    if (!balanceRawString) return "0";
     
-    // Auto-refresh every 15 seconds to catch new deposits
-    const interval = setInterval(() => {
-      fetchPositions()
-    }, 15000) // 15 seconds
-    
-    return () => clearInterval(interval)
-  }, [userAddress])
+    // Use BigInt for safe math with large numbers
+    const rawBalance = BigInt(balanceRawString);
+    const DIVISOR = BigInt(10) ** BigInt(decimals);
 
-  const fetchPositions = async () => {
+    // Get the whole number part
+    const wholePart = rawBalance / DIVISOR;
+    
+    // Get the fractional part
+    const fractionalPart = rawBalance % DIVISOR;
+
+    // Convert fractional part to string and pad with leading zeros
+    const fractionalString = fractionalPart.toString().padStart(decimals, '0');
+
+    // Combine whole and fractional
+    const result = `${wholePart}.${fractionalString}`;
+
+    // Remove trailing zeros after decimal
+    const [w, f] = result.split('.');
+    
+    // Trim trailing zeros from fractional part
+    const trimmedFractional = f ? f.replace(/0+$/, '') : '';
+
+    if (trimmedFractional.length === 0) {
+        return w; // Return only the whole number if fraction is zero
+    }
+    
+    // Return whole part and trimmed fraction
+    return `${w}.${trimmedFractional}`;
+  };
+
+  const fetchPositions = useCallback(async () => {
     setLoading(true)
 
     try {
-      // Get transaction history from localStorage (deposits and withdrawals)
-      const transactions = getTransactionHistory(userAddress || '')
-      
-      // Calculate net balance from transaction history
-      const netBalance = transactions.reduce((sum: number, tx: any) => {
-        if (tx.type === 'deposit') {
-          return sum + parseFloat(tx.amount || '0')
-        } else if (tx.type === 'withdraw') {
-          return sum - parseFloat(tx.amount || '0')
-        }
-        return sum
-      }, 0)
-
-      console.log('📊 Transaction History:', transactions)
-      console.log('💰 Net Balance from Transactions:', netBalance)
-
-      // Try to fetch real vWBTC balance from blockchain (as verification)
-      let blockchainBalance = 0
+      // Fetch real vWBTC balance from blockchain - THIS IS THE PRIMARY SOURCE
+      let balanceRawString = "0"
       if (userAddress) {
         try {
-          const provider = new RpcProvider({
-            nodeUrl: 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8'
+          // Use exact same pattern as dashboard WBTC balance fetch
+          const sepoliaProvider = new RpcProvider({ 
+            nodeUrl: "https://starknet-sepolia.public.blastapi.io/rpc/v0_6" 
           })
-          const vwbtcContract = new (Contract as any)(
-            universalErc20Abi as any,
-            VWBTC_ADDRESS,
-            provider
-          )
-          const balance = await vwbtcContract.balance_of(userAddress)
-          blockchainBalance = Number(BigInt(balance.toString())) / 1e8
-          console.log('⛓️ Blockchain Balance:', blockchainBalance)
+          const vwbtcContract = new Contract({ 
+            abi: cairo0Erc20Abi, 
+            address: VWBTC_ADDRESS, 
+            providerOrAccount: sepoliaProvider 
+          })
+          
+          const res = await vwbtcContract.balanceOf(userAddress)
+          
+          // Convert to string - handle both bigint and object responses
+          if (typeof res.balance === 'object' && res.balance !== null && 'low' in res.balance) {
+            // It's a Uint256 object
+            const low = BigInt(res.balance.low || 0)
+            const high = BigInt(res.balance.high || 0)
+            const combined = low + (high * (BigInt(2) ** BigInt(128)))
+            balanceRawString = combined.toString()
+          } else {
+            // It's already a bigint
+            balanceRawString = res.balance.toString()
+          }
         } catch (err) {
           console.error('Error fetching blockchain balance:', err)
         }
       }
 
-      // Use the maximum of localStorage net balance and blockchain balance
-      // This ensures we show changes immediately, even if blockchain hasn't confirmed yet
-      const vesuBalance = Math.max(netBalance, blockchainBalance)
-      const vesuBalanceFormatted = vesuBalance.toFixed(8)
+      // Get transaction history from localStorage (for chart generation only)
+      const transactions = getTransactionHistory(userAddress || '')
 
-      console.log('✅ Final Vesu Balance:', vesuBalanceFormatted)
+      // Use blockchain balance as the source of truth - format with 18 decimals (Starknet standard)
+      const vesuBalanceFormatted = formatBalance(balanceRawString, 18)
+      // Convert the formatted string back to a Number for chart generation
+      const blockchainBalance = Number(vesuBalanceFormatted)
 
-      // Generate chart data based on actual transaction history
-      const vesuChartData = generateChartFromHistory(transactions)
+      // Generate chart data based on actual transaction history and real blockchain balance
+      const vesuChartData = generateChartFromHistory(transactions, blockchainBalance)
       const ekuboChartData = generateEmptyChart()
 
       const newPositions: Position[] = [
@@ -112,12 +133,23 @@ const CurrentPositions = () => {
       ]
 
       setPositions(newPositions)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching positions:', err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [userAddress])
+
+  useEffect(() => {
+    fetchPositions()
+    
+    // Auto-refresh every 15 seconds to catch new deposits
+    const interval = setInterval(() => {
+      fetchPositions()
+    }, 15000) // 15 seconds
+    
+    return () => clearInterval(interval)
+  }, [fetchPositions])
 
   const getTransactionHistory = (address: string) => {
     if (!address) return []
@@ -126,9 +158,9 @@ const CurrentPositions = () => {
       const key = `tx_history_${address.toLowerCase()}`
       const data = localStorage.getItem(key)
       if (data) {
-        const transactions = JSON.parse(data)
+        const transactions = JSON.parse(data) as Array<{type: string; timestamp: number; amount: string}>
         // Return both deposits and withdrawals
-        return transactions.filter((tx: any) => tx.type === 'deposit' || tx.type === 'withdraw')
+        return transactions.filter((tx) => tx.type === 'deposit' || tx.type === 'withdraw')
       }
       return []
     } catch {
@@ -136,10 +168,24 @@ const CurrentPositions = () => {
     }
   }
 
-  const generateChartFromHistory = (transactions: any[]) => {
-    if (transactions.length === 0) {
-      // No transactions - flat line at 0
+  const generateChartFromHistory = (transactions: Array<{type: string; timestamp: number; amount: string}>, currentBalance: number) => {
+    // If no balance, show flat line at 0
+    if (currentBalance === 0) {
       return Array(8).fill(null).map(() => ({ value: 0 }))
+    }
+
+    if (transactions.length === 0) {
+      // No transaction history but we have balance - show growth from 0 to current
+      const points = 8
+      const result = []
+      
+      for (let i = 0; i < points; i++) {
+        const progress = i / (points - 1)
+        const value = currentBalance * progress
+        result.push({ value })
+      }
+      
+      return result
     }
 
     // Sort transactions by timestamp
@@ -156,14 +202,16 @@ const CurrentPositions = () => {
         cumulative -= parseFloat(tx.amount || '0')
       }
       dataPoints.push({
-        value: Math.max(0, cumulative), // Don't go below 0
+        value: Math.max(0, cumulative),
         timestamp: tx.timestamp
       })
     }
 
-    // If we have fewer than 8 points, pad with interpolated values
+    // Always use the blockchain balance as the final point
+    const finalValue = currentBalance
+
+    // If we have fewer than 8 points, pad with interpolated values to reach blockchain balance
     if (dataPoints.length < 8) {
-      const finalValue = Math.max(0, cumulative)
       const startValue = 0
       const points = 8
       const result = []
@@ -177,12 +225,16 @@ const CurrentPositions = () => {
       return result
     }
 
-    // If we have more than 8 points, sample them
+    // If we have more than 8 points, sample them and ensure last point is blockchain balance
     if (dataPoints.length > 8) {
       const step = Math.floor(dataPoints.length / 8)
-      return dataPoints.filter((_, i) => i % step === 0).slice(0, 8)
+      const sampled = dataPoints.filter((_, i) => i % step === 0).slice(0, 7)
+      sampled.push({ value: finalValue, timestamp: Date.now() / 1000 })
+      return sampled
     }
 
+    // Update the last point to match blockchain balance
+    dataPoints[dataPoints.length - 1].value = finalValue
     return dataPoints
   }
 
