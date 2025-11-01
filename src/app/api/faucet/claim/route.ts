@@ -34,6 +34,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Faucet not configured' }, { status: 500 })
     }
 
+    // 🔍 Environment Variables Check (Server-side)
+    console.log('\n=== Server-side Environment Variables Status ===')
+    console.log('FAUCET_WALLET_ADDRESS:', process.env.FAUCET_WALLET_ADDRESS ? `✅ ${process.env.FAUCET_WALLET_ADDRESS.substring(0, 10)}...${process.env.FAUCET_WALLET_ADDRESS.substring(process.env.FAUCET_WALLET_ADDRESS.length - 6)}` : '❌ Not set')
+    console.log('FAUCET_PRIVATE_KEY:', process.env.FAUCET_PRIVATE_KEY ? `✅ Set (${process.env.FAUCET_PRIVATE_KEY.length} chars, hidden for security)` : '❌ Not set')
+    console.log('RPC_URL:', process.env.RPC_URL || '❌ Not set (will use default)')
+    console.log('NEXT_PUBLIC_RPC_URL:', process.env.NEXT_PUBLIC_RPC_URL || '❌ Not set')
+    console.log('=================================================\n')
+
     console.log(`\n🚰 FAUCET TRANSFER: ${amount} WBTC → ${address}`)
 
     // 1. Setup provider
