@@ -102,6 +102,15 @@ const Header = ({ onMenuClick }: HeaderProps) => {
 
         connectWallet(myWalletAccount)
         console.log('Wallet connected:', myWalletAccount.address)
+        
+        // 🔍 Environment Variables Check (for deployment verification)
+        console.log('=== Environment Variables Status ===')
+        console.log('Client-side (browser):')
+        console.log('  NEXT_PUBLIC_RPC_URL:', process.env.NEXT_PUBLIC_RPC_URL || '❌ Not set')
+        console.log('\nServer-side (check browser network tab for API responses):')
+        console.log('  Note: Server-side env vars (FAUCET_*, RPC_URL) are only visible in API route logs')
+        console.log('  To verify: Check browser Network tab when using faucet feature')
+        console.log('=====================================')
       }
     } catch (error) {
       console.error('Failed to connect wallet:', error)
