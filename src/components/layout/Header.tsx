@@ -47,10 +47,17 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         const lastWallet = await connect({ modalMode: 'neverAsk' })
         if (lastWallet) {
           console.log('Found existing wallet connection:', lastWallet)
-          // Build WalletAccount for unified handling
+          // Build WalletAccount for unified handling - Use Alchemy API with fallbacks
+          const alchemyApiKey = typeof window !== 'undefined' 
+            ? ((window as Window & { __ALCHEMY_API_KEY__?: string }).__ALCHEMY_API_KEY__ || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY)
+            : process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
           const rpcUrl = currentChain?.id === mainnet.id 
-            ? 'https://starknet-mainnet.public.blastapi.io/rpc/v0_8'
-            : 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8'
+            ? (alchemyApiKey 
+                ? `https://starknet-mainnet.g.alchemy.com/v2/${alchemyApiKey}`
+                : 'https://starknet-mainnet.public.blastapi.io/rpc/v0_8')
+            : (alchemyApiKey
+                ? `https://starknet-sepolia.g.alchemy.com/v2/${alchemyApiKey}`
+                : 'https://starknet-sepolia-rpc.publicnode.com') // Fallback to PublicNode
           const myWalletAccount = await WalletAccount.connect(
             { nodeUrl: rpcUrl },
             lastWallet
@@ -77,10 +84,17 @@ const Header = ({ onMenuClick }: HeaderProps) => {
       })
 
       if (selectedWalletSWO) {
-        // Connect to the selected wallet with the current chain's RPC URL
+        // Connect to the selected wallet with the current chain's RPC URL - Use Alchemy API with fallbacks
+        const alchemyApiKey = typeof window !== 'undefined'
+          ? ((window as Window & { __ALCHEMY_API_KEY__?: string }).__ALCHEMY_API_KEY__ || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY)
+          : process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
         const rpcUrl = currentChain?.id === mainnet.id 
-          ? 'https://starknet-mainnet.public.blastapi.io/rpc/v0_8'
-          : 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8'
+          ? (alchemyApiKey
+              ? `https://starknet-mainnet.g.alchemy.com/v2/${alchemyApiKey}`
+              : 'https://starknet-mainnet.public.blastapi.io/rpc/v0_8')
+          : (alchemyApiKey
+              ? `https://starknet-sepolia.g.alchemy.com/v2/${alchemyApiKey}`
+              : 'https://starknet-sepolia-rpc.publicnode.com') // Fallback to PublicNode
         const myWalletAccount = await WalletAccount.connect(
           { nodeUrl: rpcUrl },
           selectedWalletSWO

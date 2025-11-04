@@ -5,7 +5,22 @@ import { shortString } from "starknet";
 // Addresses and ABIs
 import { WBTC as WBTC_1 } from "@/lib/utils/Constants";
 const VWBTC_ADDRESS = "0x076ce66eba78210a836fca94ab91828c0f6941ad88585a700f3e473a9b4af870";
-const RPC_URL = "https://starknet-sepolia.public.blastapi.io";
+// Get RPC URL with fallbacks: Alchemy → PublicNode → dRPC
+const getRpcUrl = () => {
+  let apiKey: string | undefined
+  if (typeof window !== 'undefined') {
+    apiKey = (window as any).__ALCHEMY_API_KEY__ || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+  } else {
+    apiKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+  }
+  // Priority: Alchemy → PublicNode
+  if (apiKey) {
+    return `https://starknet-sepolia.g.alchemy.com/v2/${apiKey}`
+  }
+  // Fallback to PublicNode (free, no API key needed)
+  return 'https://starknet-sepolia-rpc.publicnode.com'
+}
+const RPC_URL = getRpcUrl();
 
 // Minimal ABIs
 const erc20Abi = [

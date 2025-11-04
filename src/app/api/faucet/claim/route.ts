@@ -36,9 +36,21 @@ export async function POST(request: NextRequest) {
 
     console.log(`\n🚰 FAUCET TRANSFER: ${amount} WBTC → ${address}`)
 
-    // 1. Setup provider
+    // 1. Setup provider - Use Alchemy API with fallbacks
+    const alchemyApiKey = process.env.ALCHEMY_API_KEY || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+    let rpcUrl: string
+    
+    if (alchemyApiKey) {
+      rpcUrl = `https://starknet-sepolia.g.alchemy.com/v2/${alchemyApiKey}`
+    } else {
+      // Fallback chain: PublicNode → dRPC
+      // Try PublicNode first (free, no API key needed)
+      rpcUrl = 'https://starknet-sepolia-rpc.publicnode.com'
+      console.log('ℹ️ Using PublicNode RPC as fallback (Alchemy not configured)')
+    }
+    
     const provider = new RpcProvider({
-      nodeUrl: 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8'
+      nodeUrl: rpcUrl
     })
 
     // 2. Create faucet account with private key

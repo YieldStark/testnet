@@ -28,8 +28,11 @@ FAUCET_WALLET_ADDRESS=0x1234567890abcdef...
 # Private key for the faucet wallet
 FAUCET_PRIVATE_KEY=0xabcdef1234567890...
 
-# RPC URL (optional)
-NEXT_PUBLIC_RPC_URL=https://starknet-sepolia.public.blastapi.io/rpc/v0_8
+# Alchemy API Key (REQUIRED - Blast API is deprecated)
+# Get your API key from https://alchemy.com
+NEXT_PUBLIC_ALCHEMY_API_KEY=your_alchemy_api_key_here
+# For server-side API routes, you can also use:
+ALCHEMY_API_KEY=your_alchemy_api_key_here
 ```
 
 ⚠️ **Security Warning**: NEVER commit your `.env.local` file to version control!
@@ -124,7 +127,8 @@ The faucet page follows YieldStark's design system:
 ### "Transaction failed"
 - Check that your private key is correct
 - Ensure the faucet wallet has enough WBTC
-- Verify the RPC URL is working
+- **Verify your Alchemy API key is set correctly** (Blast API is deprecated)
+- Check that the Alchemy API key has access to Starknet Sepolia network
 
 ### Environment variables not loading
 - Make sure the file is named `.env.local` (not `.env`)

@@ -21,10 +21,6 @@ export async function fetchUserTransactionHistory(
   userAddress: string
 ): Promise<Transaction[]> {
   try {
-    const provider = new RpcProvider({
-      nodeUrl: 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8'
-    })
-
     const transactions: Transaction[] = []
 
     // Method 1: Try to fetch from Voyager API (if available)
@@ -43,26 +39,27 @@ export async function fetchUserTransactionHistory(
         
         // Filter transactions related to this user
         if (data.items && Array.isArray(data.items)) {
-          const userTxs = data.items.filter((tx: any) => 
+          const userTxs = data.items.filter((tx: { from?: string; to?: string }) => 
             tx.from?.toLowerCase() === userAddress.toLowerCase() ||
             tx.to?.toLowerCase() === userAddress.toLowerCase()
           )
 
           for (const tx of userTxs) {
+            const txData = tx as { hash?: string; timestamp?: number; from?: string; to?: string; status?: string; blockNumber?: number; calldata?: unknown[] }
             transactions.push({
-              hash: tx.hash || '',
-              timestamp: tx.timestamp || Math.floor(Date.now() / 1000),
-              type: determineTransactionType(tx, userAddress),
-              amount: parseAmount(tx),
-              from: tx.from || '',
-              to: tx.to || '',
-              status: tx.status || 'success',
-              blockNumber: tx.blockNumber || 0
+              hash: txData.hash || '',
+              timestamp: txData.timestamp || Math.floor(Date.now() / 1000),
+              type: determineTransactionType(txData, userAddress),
+              amount: parseAmount(txData),
+              from: txData.from || '',
+              to: txData.to || '',
+              status: txData.status || 'success',
+              blockNumber: txData.blockNumber || 0
             })
           }
         }
       }
-    } catch (voyagerError) {
+    } catch {
       console.log('Voyager API not available, using fallback method')
     }
 
@@ -87,7 +84,7 @@ export async function fetchUserTransactionHistory(
   }
 }
 
-function determineTransactionType(tx: any, userAddress: string): 'deposit' | 'withdraw' | 'transfer' {
+function determineTransactionType(tx: { from?: string; to?: string }, userAddress: string): 'deposit' | 'withdraw' | 'transfer' {
   const isFromUser = tx.from?.toLowerCase() === userAddress.toLowerCase()
   const isToVesu = tx.to?.toLowerCase() === VWBTC_ADDRESS.toLowerCase()
   const isFromVesu = tx.from?.toLowerCase() === VWBTC_ADDRESS.toLowerCase()
@@ -101,7 +98,7 @@ function determineTransactionType(tx: any, userAddress: string): 'deposit' | 'wi
   }
 }
 
-function parseAmount(tx: any): string {
+function parseAmount(tx: { calldata?: unknown[] }): string {
   // Try to extract amount from transaction data
   // This is a simplified version - in production you'd parse the calldata
   try {

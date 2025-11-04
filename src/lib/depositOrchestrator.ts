@@ -60,7 +60,7 @@ async function depositToVWBTC(account: AccountInterface, address: string, amount
       successStates: ["ACCEPTED_ON_L2", "ACCEPTED_ON_L1"]
     })
     console.log("Deposit transaction confirmed")
-  } catch (waitError) {
+  } catch {
     // If waitForTransaction times out or fails, still return the hash
     console.warn("Transaction wait timed out, but transaction was sent:", tx.transaction_hash)
   }

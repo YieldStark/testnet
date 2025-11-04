@@ -1,17 +1,27 @@
 'use client'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { CONTRACTS } from '@/lib/config'
 import { useNetworkStore } from '@/stores/network-store'
 
 export type NetworkId = 'sepolia' | 'mainnet'
 
+interface ContractsConfig {
+  YIELDSTARK: {
+    [key in NetworkId]: string
+  }
+  TOKENS: {
+    WBTC: {
+      [key in NetworkId]: string
+    }
+  }
+}
+
 export function getYieldStarkAddressById(networkId: NetworkId): string {
-  return (CONTRACTS as any).YIELDSTARK[networkId] as string
+  return (CONTRACTS as ContractsConfig).YIELDSTARK[networkId]
 }
 
 export function getTokenAddressById(token: 'WBTC', networkId: NetworkId): string {
-  return (CONTRACTS as any).TOKENS[token][networkId] as string
+  return (CONTRACTS as ContractsConfig).TOKENS[token][networkId]
 }
 
 export function useYieldStarkAddress(): string {
@@ -24,6 +34,7 @@ export function useTokenAddress(token: 'WBTC'): string {
   return getTokenAddressById(token, current.id as NetworkId)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getYieldStarkContract(_address: string, _accountOrProvider: any) {
   // Stop constructing this contract entirely; deposit path now uses Vesu only.
   // We keep the function to avoid imports breaking, but throw if called.

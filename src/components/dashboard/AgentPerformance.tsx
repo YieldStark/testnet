@@ -65,8 +65,15 @@ const AgentPerformance = () => {
       let balanceRawString = "0"
       try {
         // Use exact same pattern as dashboard WBTC balance fetch
+        // Use Alchemy API with fallbacks: Alchemy → PublicNode → dRPC
+        const alchemyApiKey = typeof window !== 'undefined'
+          ? ((window as Window & { __ALCHEMY_API_KEY__?: string }).__ALCHEMY_API_KEY__ || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY)
+          : process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+        const rpcUrl = alchemyApiKey
+          ? `https://starknet-sepolia.g.alchemy.com/v2/${alchemyApiKey}`
+          : 'https://starknet-sepolia-rpc.publicnode.com' // Fallback to PublicNode
         const sepoliaProvider = new RpcProvider({ 
-          nodeUrl: "https://starknet-sepolia.public.blastapi.io/rpc/v0_6" 
+          nodeUrl: rpcUrl
         })
         const vwbtcContract = new Contract({ 
           abi: cairo0Erc20Abi, 
@@ -118,23 +125,6 @@ const AgentPerformance = () => {
       setLoading(false)
     }
   }, [userAddress, fetchRealData])
-
-  const getTransactionHistory = (address: string) => {
-    if (!address) return []
-    
-    try {
-      const key = `tx_history_${address.toLowerCase()}`
-      const data = localStorage.getItem(key)
-      if (data) {
-        const transactions = JSON.parse(data) as Array<{type: string}>
-        // Return both deposits and withdrawals
-        return transactions.filter((tx) => tx.type === 'deposit' || tx.type === 'withdraw')
-      }
-      return []
-    } catch {
-      return []
-    }
-  }
 
   if (loading) {
     return (

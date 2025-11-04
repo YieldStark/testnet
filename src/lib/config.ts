@@ -1,7 +1,25 @@
+// Get RPC URL for Sepolia with fallback chain
+const getSepoliaRpcUrl = () => {
+  let apiKey: string | undefined
+  
+  if (typeof window !== 'undefined') {
+    apiKey = ((window as Window & { __ALCHEMY_API_KEY__?: string }).__ALCHEMY_API_KEY__ || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY)
+  } else {
+    apiKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+  }
+  
+  // Priority: Alchemy → PublicNode → dRPC
+  if (apiKey) {
+    return `https://starknet-sepolia.g.alchemy.com/v2/${apiKey}`
+  }
+  // Fallback to PublicNode (free, no API key needed)
+  return 'https://starknet-sepolia-rpc.publicnode.com'
+}
+
 // Starknet Configuration - This will be dynamically set based on network selection
 export const STARKNET_CONFIG = {
   // These are fallback values, actual values come from network store
-  RPC_URL: 'https://starknet-sepolia.public.blastapi.io/rpc/v0_8',
+  RPC_URL: getSepoliaRpcUrl(),
   CHAIN_ID: '0x534e5f5345504f4c4941', // Starknet Sepolia
   EXPLORER_URL: 'https://sepolia.starkscan.co',
 }

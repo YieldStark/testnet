@@ -84,8 +84,15 @@ export default function SettingsPage() {
 
       if (selectedWalletSWO) {
         // Connect to the selected wallet
+        // Use Alchemy API with fallbacks: Alchemy → PublicNode → dRPC
+        const alchemyApiKey = typeof window !== 'undefined'
+          ? ((window as Window & { __ALCHEMY_API_KEY__?: string }).__ALCHEMY_API_KEY__ || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY)
+          : process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+        const rpcUrl = alchemyApiKey
+          ? `https://starknet-mainnet.g.alchemy.com/v2/${alchemyApiKey}`
+          : 'https://starknet-mainnet.public.blastapi.io/rpc/v0_8' // Mainnet fallback (no public node for mainnet yet)
         const myWalletAccount = await WalletAccount.connect(
-          { nodeUrl: 'https://starknet-mainnet.public.blastapi.io/rpc/v0_8' },
+          { nodeUrl: rpcUrl },
           selectedWalletSWO
         )
 

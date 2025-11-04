@@ -6,7 +6,7 @@ import CurrentPositions from '@/components/dashboard/CurrentPositions'
 import DepositModal from '@/components/ui/DepositModal'
 import WithdrawModal from '@/components/ui/WithdrawModal'
 import { useWalletStore } from '@/providers/wallet-store-provider'
-import { useTokenAddress, useYieldStarkAddress } from '@/lib/contracts'
+import { useYieldStarkAddress } from '@/lib/contracts'
 import { cairo0Erc20Abi } from '@/lib/abi/cairo0Erc20'
 import { Contract, RpcProvider, Account } from 'starknet'
 import { depositVesuFlow } from '@/lib/depositOrchestrator'
@@ -45,7 +45,14 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       // Fetch WBTC balance using the exact working approach from previous codebase
-      const sepoliaProvider = new RpcProvider({ nodeUrl: "https://starknet-sepolia.public.blastapi.io/rpc/v0_6" });
+      // Use Alchemy API with fallbacks: Alchemy → PublicNode → dRPC
+      const alchemyApiKey = typeof window !== 'undefined'
+        ? ((window as Window & { __ALCHEMY_API_KEY__?: string }).__ALCHEMY_API_KEY__ || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY)
+        : process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+      const rpcUrl = alchemyApiKey
+        ? `https://starknet-sepolia.g.alchemy.com/v2/${alchemyApiKey}`
+        : 'https://starknet-sepolia-rpc.publicnode.com' // Fallback to PublicNode
+      const sepoliaProvider = new RpcProvider({ nodeUrl: rpcUrl });
       const erc20 = new Contract({ abi: cairo0Erc20Abi, address: WBTC, providerOrAccount: sepoliaProvider });
       const res = await erc20.balanceOf(wallet.address);
       setWbtcBalance(res.balance.toString());
